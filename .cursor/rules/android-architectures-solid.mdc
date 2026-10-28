@@ -1,0 +1,12 @@
+---
+description: SOLID Principles, MVVM, MVI, and Clean Architecture Rules for Android
+globs: **/*.kt, **/*.java
+alwaysApply: true
+---
+
+# Android Architectures & SOLID Principles
+
+- **Single Responsibility (SRP)**: Keep Composables/Fragments purely declarative; business logic lives in UseCases.
+- **Dependency Inversion (DIP)**: Inject repository interfaces using Hilt/Koin rather than concrete singletons.
+- Support **Clean Architecture**, **MVVM**, and **MVI** patterns.
+- Write unit tests using JUnit 5, MockK, and `runTest`.

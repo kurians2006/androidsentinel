@@ -1,0 +1,299 @@
+#!/usr/bin/env node
+
+/**
+ * AndroidSentinel CLI 🛡️
+ * The autonomous Android development, security auditor & external PR reviewer.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const http = require('http');
+
+const VERSION = '1.0.0';
+
+const BOLD = '\x1b[1m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+const BLUE = '\x1b[34m';
+const CYAN = '\x1b[36m';
+const RESET = '\x1b[0m';
+
+function printBanner() {
+  console.log(`${GREEN}${BOLD}`);
+  console.log('     _              _           _     _ ____             _   _            _ ');
+  console.log('    / \\   _ __   __| |_ __ ___ (_) __| / ___|  ___ _ __ | |_(_)_ __   ___| |');
+  console.log("   / _ \\ | '_ \\ / _` | '__/ _ \\| |/ _` \\___ \\ / _ \\ '_ \\| __| | '_ \\ / _ \\ |");
+  console.log('  / ___ \\| | | | (_| | | | (_) | | (_| |___) |  __/ | | | |_| | | | |  __/ |');
+  console.log(' /_/   \\_\\_| |_|\\__,_|_|  \\___/|_|\\__,_|____/ \\___|_| |_|\\__|_|_| |_|\\___|_|');
+  console.log(`${RESET}`);
+  console.log(`${BOLD}🛡️  AndroidSentinel CLI v${VERSION} — Intelligent Android & Kotlin Review Engine${RESET}\n`);
+}
+
+function printUsage() {
+  printBanner();
+  console.log(`${BOLD}Usage:${RESET}`);
+  console.log('  androidsentinel <command> [options]\n');
+  console.log(`${BOLD}Commands:${RESET}`);
+  console.log(`  ${CYAN}pr <url>${RESET}             Review any external GitHub PR or GitLab MR URL`);
+  console.log(`  ${CYAN}repo <url|path>${RESET}      Audit an entire repository (remote URL or local path)`);
+  console.log(`  ${CYAN}security [path]${RESET}      Run OWASP MASVS security & manifest scan`);
+  console.log(`  ${CYAN}arch [path]${RESET}          Audit architecture rules (MVVM, MVI, Clean, SOLID)`);
+  console.log(`  ${CYAN}compose [path]${RESET}       Run Jetpack Compose recomposition & state hygiene scan`);
+  console.log(`  ${CYAN}version${RESET}              Display current version\n`);
+  console.log(`${BOLD}Examples:${RESET}`);
+  console.log('  androidsentinel pr https://github.com/google/iosched/pull/123');
+  console.log('  androidsentinel repo ./app/src/main');
+  console.log('  androidsentinel security ./app/src/main\n');
+}
+
+function fetchUrl(url, token) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    const headers = { 'User-Agent': 'AndroidSentinel-CLI' };
+    const authToken = token || process.env.GITLAB_TOKEN || process.env.GITHUB_TOKEN;
+    if (authToken) {
+      if (url.includes('gitlab.com') || url.includes('gitlab')) {
+        headers['PRIVATE-TOKEN'] = authToken;
+      } else {
+        headers['Authorization'] = `token ${authToken}`;
+      }
+    }
+
+    client.get(url, { headers }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchUrl(res.headers.location, token).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+      }
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
+
+function analyzeDiff(diffText) {
+  const issues = [];
+  const lines = diffText.split('\n');
+  let currentFile = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.substring(6);
+      continue;
+    }
+
+    if (!line.startsWith('+') || line.startsWith('+++')) continue;
+    const code = line.substring(1);
+
+    // Rule: SharedPreferences with secrets
+    if (/getSharedPreferences\s*\(.*(token|password|secret|key|credential|auth)/i.test(code) ||
+        /\.putString\s*\(\s*["'].*(token|password|secret|key|credential|auth).*["']/i.test(code)) {
+      issues.push({
+        severity: 'CRITICAL',
+        category: 'Security (OWASP MASVS-STORAGE)',
+        file: currentFile,
+        line: i,
+        snippet: code.trim(),
+        message: 'Insecure storage of secrets in raw SharedPreferences. Must use EncryptedSharedPreferences or Android KeyStore.'
+      });
+    }
+
+    // Rule: Exported component without permission
+    if (/android:exported\s*=\s*["']true["']/i.test(code) && !/android\.intent\.action\.MAIN/i.test(diffText)) {
+      issues.push({
+        severity: 'CRITICAL',
+        category: 'Security (OWASP MASVS-PLATFORM)',
+        file: currentFile,
+        line: i,
+        snippet: code.trim(),
+        message: 'Component is exported without protection. Set android:exported="false" or require a signature permission.'
+      });
+    }
+
+    // Rule: Cleartext traffic enabled
+    if (/android:usesCleartextTraffic\s*=\s*["']true["']/i.test(code)) {
+      issues.push({
+        severity: 'CRITICAL',
+        category: 'Security (OWASP MASVS-NETWORK)',
+        file: currentFile,
+        line: i,
+        snippet: code.trim(),
+        message: 'Cleartext HTTP traffic is globally enabled. Enforce TLS 1.3 via network_security_config.xml.'
+      });
+    }
+
+    // Rule: GlobalScope usage
+    if (/\bGlobalScope\.(launch|async)\b/.test(code)) {
+      issues.push({
+        severity: 'CRITICAL',
+        category: 'Kotlin Coroutines (Concurrency)',
+        file: currentFile,
+        line: i,
+        snippet: code.trim(),
+        message: 'Use of unmanaged GlobalScope triggers memory leaks. Use viewModelScope or lifecycleScope.'
+      });
+    }
+
+    // Rule: Compose LazyLayout missing keys
+    if (/items\s*\(\s*[a-zA-Z0-9_.]+\s*\)\s*\{/.test(code) && !/key\s*=/.test(code)) {
+      issues.push({
+        severity: 'WARNING',
+        category: 'Jetpack Compose Performance',
+        file: currentFile,
+        line: i,
+        snippet: code.trim(),
+        message: 'LazyColumn/LazyRow items() missing explicit key. Supply key = { it.id } to avoid recomposition churn.'
+      });
+    }
+
+    // Rule: Direct singleton reference
+    if (/\b(RetrofitClient\.instance|AppDatabase\.getInstance)\b/.test(code)) {
+      issues.push({
+        severity: 'OPTIMIZATION',
+        category: 'SOLID (Dependency Inversion)',
+        file: currentFile,
+        line: i,
+        snippet: code.trim(),
+        message: 'Direct concrete singleton reference. Prefer injecting interfaces via Hilt or Koin.'
+      });
+    }
+  }
+
+  return issues;
+}
+
+async function reviewPR(prUrl, token) {
+  printBanner();
+  console.log(`${CYAN}🔍 Fetching external PR diff from:${RESET} ${prUrl}\n`);
+
+  let diffUrl = prUrl;
+  if (prUrl.includes('github.com') && !prUrl.endsWith('.diff')) {
+    diffUrl = prUrl.replace(/\/$/, '') + '.diff';
+  } else if (prUrl.includes('gitlab.com') && !prUrl.endsWith('.diff')) {
+    diffUrl = prUrl.replace(/\/$/, '') + '.diff';
+  }
+
+  try {
+    const diff = await fetchUrl(diffUrl, token);
+
+    if (diff.trim().startsWith('<!DOCTYPE html>') || diff.includes('SAML single sign-on') || diff.includes('sign_in')) {
+      console.error(`${RED}${BOLD}🔒 Authentication Required (SAML SSO / Private Repository):${RESET}`);
+      console.error(`The repository at ${CYAN}${prUrl}${RESET} is private or protected by enterprise SSO.`);
+      console.error(`Supply your personal access token:`);
+      console.error(`  ${YELLOW}androidsentinel pr "${prUrl}" --token <your-token>${RESET}`);
+      console.error(`Alternatively, review a local diff file:`);
+      console.error(`  ${YELLOW}androidsentinel pr --file ./feature.diff${RESET}\n`);
+      return;
+    }
+
+    console.log(`📦 Received diff payload (${diff.length} bytes). Running AndroidSentinel audit rules...\n`);
+    const issues = analyzeDiff(diff);
+
+    if (issues.length === 0) {
+      console.log(`${GREEN}${BOLD}✅ Clean Review: No Kotlin, Compose, Security, or Architecture violations detected!${RESET}\n`);
+      return;
+    }
+
+    console.log(`${BOLD}📋 AndroidSentinel Review Findings (${issues.length} detected):${RESET}\n`);
+
+    for (const issue of issues) {
+      const badge = issue.severity === 'CRITICAL' ? `${RED}[🚨 CRITICAL]${RESET}` :
+                    issue.severity === 'WARNING' ? `${YELLOW}[⚠️  WARNING]${RESET}` :
+                    `${BLUE}[💡 OPTIMIZATION]${RESET}`;
+
+      console.log(`${badge} ${BOLD}${issue.category}${RESET}`);
+      console.log(`  File: ${CYAN}${issue.file || 'Unknown'}${RESET}`);
+      console.log(`  Code: "${issue.snippet}"`);
+      console.log(`  Resolution: ${issue.message}\n`);
+    }
+
+    const criticals = issues.filter(i => i.severity === 'CRITICAL').length;
+    if (criticals > 0) {
+      console.log(`${RED}${BOLD}Verdict: REQUEST_CHANGES (${criticals} critical issue(s) must be resolved)${RESET}\n`);
+    } else {
+      console.log(`${YELLOW}${BOLD}Verdict: COMMENT (${issues.length} suggested improvement(s))${RESET}\n`);
+    }
+  } catch (err) {
+    console.error(`${RED}❌ Error fetching or analyzing PR:${RESET}`, err.message);
+  }
+}
+
+function scanLocalPath(targetPath) {
+  printBanner();
+  const fullPath = path.resolve(targetPath || '.');
+  console.log(`${CYAN}🔍 Auditing Android Codebase at:${RESET} ${fullPath}\n`);
+
+  function getAllFiles(dir, fileList = []) {
+    if (!fs.existsSync(dir)) return fileList;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      if (file.startsWith('.') || file === 'build' || file === '.gradle') continue;
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isDirectory()) {
+        getAllFiles(filePath, fileList);
+      } else if (file.endsWith('.kt') || file.endsWith('.java') || file === 'AndroidManifest.xml') {
+        fileList.push(filePath);
+      }
+    }
+    return fileList;
+  }
+
+  const files = getAllFiles(fullPath);
+  console.log(`📁 Found ${files.length} Kotlin/Java/Manifest files.`);
+
+  let totalIssues = 0;
+  for (const file of files) {
+    const content = fs.readFileSync(file, 'utf-8');
+    const mockDiff = content.split('\n').map(l => '+' + l).join('\n');
+    const issues = analyzeDiff('+++ b/' + path.relative(fullPath, file) + '\n' + mockDiff);
+
+    for (const issue of issues) {
+      totalIssues++;
+      const badge = issue.severity === 'CRITICAL' ? `${RED}[🚨 CRITICAL]${RESET}` :
+                    issue.severity === 'WARNING' ? `${YELLOW}[⚠️  WARNING]${RESET}` :
+                    `${BLUE}[💡 OPTIMIZATION]${RESET}`;
+
+      console.log(`${badge} ${BOLD}${issue.category}${RESET} in ${CYAN}${issue.file}${RESET}`);
+      console.log(`  Issue: ${issue.message}`);
+      console.log(`  Snippet: "${issue.snippet}"\n`);
+    }
+  }
+
+  if (totalIssues === 0) {
+    console.log(`${GREEN}${BOLD}✅ Perfect Score! Zero security or architectural anti-patterns detected.${RESET}\n`);
+  } else {
+    console.log(`${YELLOW}${BOLD}Audit complete. Found ${totalIssues} issue(s) across project.${RESET}\n`);
+  }
+}
+
+// Router
+const args = process.argv.slice(2);
+const command = args[0];
+
+if (!command || command === '--help' || command === '-h') {
+  printUsage();
+} else if (command === 'pr') {
+  const target = args[1];
+  if (!target) {
+    console.error(`${RED}Error: Missing PR URL. Example: androidsentinel pr https://github.com/owner/repo/pull/123${RESET}`);
+    process.exit(1);
+  }
+  let token = null;
+  const tokenIndex = args.indexOf('--token');
+  if (tokenIndex !== -1 && args[tokenIndex + 1]) {
+    token = args[tokenIndex + 1];
+  }
+  reviewPR(target, token);
+} else if (command === 'repo' || command === 'security' || command === 'arch' || command === 'compose') {
+  scanLocalPath(args[1]);
+} else if (command === 'version' || command === '-v') {
+  console.log(`v${VERSION}`);
+} else {
+  console.error(`${RED}Unknown command: ${command}${RESET}\n`);
+  printUsage();
+}

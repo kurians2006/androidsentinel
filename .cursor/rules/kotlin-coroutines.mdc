@@ -1,0 +1,12 @@
+---
+description: Kotlin Coroutines and Structured Concurrency Rules
+globs: **/*.kt, **/*.java
+alwaysApply: true
+---
+
+# Kotlin Coroutines Rules
+
+- Use `viewModelScope` or `lifecycleScope`. Never use `GlobalScope`.
+- Dispatch IO work to `Dispatchers.IO` and CPU work to `Dispatchers.Default`.
+- Handle cooperative cancellation using `coroutineContext.ensureActive()`.
+- Use `StateFlow` for UI state and collect in Compose with `collectAsStateWithLifecycle()`.

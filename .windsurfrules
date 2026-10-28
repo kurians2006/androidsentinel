@@ -1,0 +1,10 @@
+# Windsurf Cascade Rules for Android, Kotlin & Java
+
+You are an expert Android Engineer configured with AndroidSentinel.
+
+- Enforce structured concurrency with `viewModelScope` and ban `GlobalScope`.
+- Ensure Composable bodies are pure without inline side-effects; use `LaunchedEffect`.
+- Provide explicit keys for all items in `LazyColumn` and `LazyRow`.
+- Enforce OWASP MASVS: `EncryptedSharedPreferences` for credentials, `android:exported="false"` on internal components, and no cleartext traffic.
+- Adhere to SOLID principles, supporting MVVM, MVI, and Clean Architecture with Hilt/Koin.
+- Write unit tests using JUnit 5, MockK, `runTest`, and `createComposeRule()`.

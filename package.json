@@ -1,0 +1,28 @@
+{
+  "name": "androidsentinel",
+  "version": "1.0.0",
+  "description": "Production-grade Android, Kotlin, Java, Jetpack Compose development, security auditing, and PR code review agent suite.",
+  "main": "packages/github-action/src/review.js",
+  "bin": {
+    "androidsentinel": "./bin/androidsentinel"
+  },
+  "scripts": {
+    "test": "node packages/github-action/src/review.js --dry-run"
+  },
+  "keywords": [
+    "android",
+    "kotlin",
+    "java",
+    "jetpack-compose",
+    "coroutines",
+    "flow",
+    "code-review",
+    "security-audit",
+    "owasp-masvs",
+    "agent-skills",
+    "cursor",
+    "claude-code"
+  ],
+  "author": "AndroidSentinel Contributors",
+  "license": "MIT"
+}

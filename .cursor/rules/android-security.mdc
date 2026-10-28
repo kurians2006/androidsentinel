@@ -1,0 +1,13 @@
+---
+description: Android Security and OWASP MASVS Auditing Rules
+globs: **/*.kt, **/*.java, **/AndroidManifest.xml
+alwaysApply: true
+---
+
+# Android Security Rules (OWASP MASVS)
+
+- Sensitive tokens and credentials MUST be stored in `EncryptedSharedPreferences` or KeyStore. Never store secrets in raw `SharedPreferences`.
+- Non-launcher components in `AndroidManifest.xml` must set `android:exported="false"`.
+- Never allow cleartext HTTP (`android:usesCleartextTraffic="true"`).
+- Cryptographically bind biometric auth via `BiometricPrompt.CryptoObject`.
+- Never log PII in `Log.d` or `println`; use Timber with release stripping.

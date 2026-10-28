@@ -1,0 +1,34 @@
+{
+  "$schema": "https://skills.sh/schema.json",
+  "name": "androidsentinel",
+  "version": "1.0.0",
+  "description": "Production-grade Android, Kotlin, Java, Jetpack Compose development, security auditing, and PR code review agent suite.",
+  "author": "AndroidSentinel Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kurians2006/androidsentinel"
+  },
+  "skills": [
+    {
+      "name": "android-code-review",
+      "path": "packages/skills/android-code-review/SKILL.md",
+      "description": "Audits and reviews Android, Kotlin, and Java pull requests, git diffs, and source files."
+    },
+    {
+      "name": "android-security-audit",
+      "path": "packages/skills/android-security-audit/SKILL.md",
+      "description": "Audits Android applications for OWASP MASVS vulnerabilities, KeyStore misuse, exported components, and cleartext traffic."
+    },
+    {
+      "name": "compose-architect",
+      "path": "packages/skills/compose-architect/SKILL.md",
+      "description": "Designs and refactors modern Jetpack Compose architectures, MVI/MVVM, and state management."
+    },
+    {
+      "name": "external-pr-reviewer",
+      "path": "packages/skills/external-pr-reviewer/SKILL.md",
+      "description": "Reviews external GitHub Pull Requests (PRs), GitLab Merge Requests (MRs), and remote Android Git repositories."
+    }
+  ]
+}

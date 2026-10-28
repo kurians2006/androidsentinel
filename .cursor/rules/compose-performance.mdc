@@ -1,0 +1,12 @@
+---
+description: Jetpack Compose Architecture and Performance Rules
+globs: **/*.kt
+alwaysApply: true
+---
+
+# Jetpack Compose Performance Rules
+
+- Never perform side-effects or network calls directly in a Composable body; use `LaunchedEffect`.
+- Always supply explicit `key = { ... }` in `LazyColumn` and `LazyRow` items.
+- Wrap complex or unstable state collections in `@Immutable` or `@Stable` data classes.
+- Use `derivedStateOf` to optimize frequently recalculated values (e.g. scroll state).
