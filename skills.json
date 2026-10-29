@@ -29,6 +29,11 @@
       "name": "external-pr-reviewer",
       "path": "packages/skills/external-pr-reviewer/SKILL.md",
       "description": "Reviews external GitHub Pull Requests (PRs), GitLab Merge Requests (MRs), and remote Android Git repositories."
+    },
+    {
+      "name": "android-health-check",
+      "path": "packages/skills/android-health-check/SKILL.md",
+      "description": "Performs fixed-scope technical investigations, ANR and memory leak audits, and generates executive Android App Health Check reports."
     }
   ]
 }
